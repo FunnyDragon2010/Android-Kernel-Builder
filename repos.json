@@ -1,7 +1,7 @@
 [  {
     "kernelSource": {
       "name": "alioth-ksun",
-      "repo": "https://github.com/MiCode/Xiaomi_Kernel_OpenSource/tree/alioth-r-oss",
+      "repo": "https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git",
       "branch": "alioth-r-oss",
       "device": "alioth"
     },

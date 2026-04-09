@@ -1,52 +1,62 @@
-name: Build Alioth KPM Kernel
+name: Build Alioth Kernel (KSU Next)
+
 on:
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: 📥 Checkout
         uses: actions/checkout@v4
 
-      - name: Cleanup Environment
+      - name: 🧹 Cleanup & Install deps
         run: |
           sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php /opt/ghc
-          sudo apt update && sudo apt install -y bc build-essential flex bison lld llvm libssl-dev libelf-dev
+          sudo apt update
+          sudo apt install -y bc build-essential flex bison lld llvm \
+          libssl-dev libelf-dev curl git
 
-      - name: Set Up Toolchain (Neutron Clang)
+      - name: ⚙️ Setup Neutron Clang
         run: |
-          mkdir -p clang
+          mkdir clang
           curl -LSs https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman | bash -s -- -S
           echo "$(pwd)/clang/bin" >> $GITHUB_PATH
 
-      - name: Fetch Kernel Source
+      - name: 📦 Clone kernel
         run: |
           git clone https://github.com/FunnyDragon2010/kernel_xiaomi_sm8250_KPM -b base kernel
-          cd kernel
-          # Интеграция KernelSU Next
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/main/kernel/setup.sh" | bash -s main
-          
-      - name: Disable Kprobes Hooks (Use Manual)
-        run: |
-          cd kernel
-          # Отключаем KPROBES в конфиге, чтобы KSU перешел в режим Legacy/Manual
-          sed -i 's/CONFIG_KPROBES=y/CONFIG_KPROBES=n/g' arch/arm64/configs/nethunter_defconfig_alioth
-          sed -i 's/CONFIG_KPROBE_EVENTS=y/CONFIG_KPROBE_EVENTS=n/g' arch/arm64/configs/nethunter_defconfig_alioth
-          # Гарантируем включение KALLSYMS для работы символов
-          echo "CONFIG_KALLSYMS_ALL=y" >> arch/arm64/configs/nethunter_defconfig_alioth
-          echo "CONFIG_KSU_MANUAL_HOOKS=y" >> arch/arm64/configs/nethunter_defconfig_alioth
 
-      - name: Build Kernel
+      - name: 🔧 Setup KernelSU Next (LEGACY)
         run: |
           cd kernel
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
+
+      - name: 🩹 Patch reboot.c (KSU hook)
+        run: |
+          cd kernel
+
+          sed -i '/SYSCALL_DEFINE4(reboot/i \
+#ifdef CONFIG_KSU\n\
+extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);\n\
+#endif\n' kernel/reboot.c
+
+          sed -i '/int ret = 0;/a \
+#ifdef CONFIG_KSU\n\
+\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);\n\
+#endif\n' kernel/reboot.c
+
+      - name: ⚙️ Build kernel
+        run: |
+          cd kernel
+
           export ARCH=arm64
           export SUBARCH=arm64
-          export KBUILD_BUILD_HOST=GitHub-Actions
-          export KBUILD_BUILD_USER=FunnyDragon
-          
-          make O=out ARCH=arm64 CC=clang HOSTCC=gcc HOSTLD=ld nethunter_defconfig_alioth
-          
+          export PATH="$(pwd)/../clang/bin:$PATH"
+
+          make O=out ARCH=arm64 nethunter_defconfig_alioth
+
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
@@ -60,110 +70,28 @@ jobs:
             OBJCOPY=llvm-objcopy \
             OBJDUMP=llvm-objdump \
             READELF=llvm-readelf \
-            STRIP=llvm-strip \
-            HOSTCC=gcc \
-            HOSTLD=ld
+            STRIP=llvm-strip
 
-      - name: Upload Image
+      - name: 📤 Upload Image
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel-Alioth-KPM
+          name: Alioth-Kernel-KSU
           path: kernel/out/arch/arm64/boot/Image
-roup.c               
-      #     fi
-      - name: "👍 Make defconfig"
-        working-directory: ${{ env.KERNEL_NAME }}
-        env:
-          args: ${{ steps.generate-args.outputs.args }}
-          arch: ${{ steps.generate-args.outputs.ARCH }}
+                - name: 📦 Clone AnyKernel3
         run: |
-          echo "PATH Variable: $PATH"
-          make ${{ env.args }} ${{ env.DEFCONFIG_NAME }}
+          git clone https://github.com/osm0sis/AnyKernel3
 
-      - name: "🎶 Build kernel"
-        working-directory: ${{ env.KERNEL_NAME }}
-        env:
-          args: ${{ steps.generate-args.outputs.args }}
+      - name: 📦 Copy kernel to AnyKernel3
         run: |
-          echo "PATH Variable: $PATH"
-          make ${{ env.args }}
+          cp kernel/out/arch/arm64/boot/Image AnyKernel3/
 
-      - name: "💛 Upload Image"
-        uses: actions/upload-artifact@v3
-        env:
-          arch: ${{ steps.generate-args.outputs.ARCH }}
-        with:
-          name: Image-${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}-${{ env.builddate }}
-          path: ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/Image
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: "💙 Upload Image.gz"
-        uses: actions/upload-artifact@v3
-        env:
-          arch: ${{ steps.generate-args.outputs.ARCH }}
-        with:
-          name: Image.gz-${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}-${{ env.builddate }}
-          path: ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/Image.gz
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: "💜 Upload dtb"
-        uses: actions/upload-artifact@v3
-        env:
-          arch: ${{ steps.generate-args.outputs.ARCH }}
-        with:
-          name: dtb-${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}-${{ env.builddate }}
-          path: ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/Image.gz-dtb
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: "❤️ Upload dtbo.img"
-        uses: actions/upload-artifact@v3
-        env:
-          arch: ${{ steps.generate-args.outputs.ARCH }}
-        with:
-          name: dtbo.img-${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}-${{ env.builddate }}
-          path: ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/dtbo.img
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: "❤️ Pack AnyKernel3.zip"
-        if: ${{ env.useAnykernel == 'true' }}
-        env:
-          arch: ${{ steps.generate-args.outputs.ARCH }}
-          anykernel: "${{ env.WORKSPACE }}/${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}_${{ env.builddate }}"
+      - name: 🗜 Pack AnyKernel3 zip
         run: |
-          ls -al
+          cd AnyKernel3
+          zip -r9 ../Alioth-Kernel-KSU.zip *
 
-          if [ -e "${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/Image" ]; then
-            cp -f ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/Image ./AnyKernel3/
-          fi
-          if [ -e "${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/Image.gz" ]; then
-            cp -f ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/Image.gz ./AnyKernel3/
-          fi
-          if [ -e "${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/dtbo" ]; then
-            cp -f ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/dtbo ./AnyKernel3/
-          fi
-          if [ -e "${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/dtbo.img" ]; then
-            cp -f ${{ env.OUT_DIR }}/arch/${{ env.arch }}/boot/dtbo.img ./AnyKernel3/
-          fi
-
-          cd AnyKernel3/
-          zip -q -r "${{ env.anykernel }}.zip" *
-
-      - name: "💾 Upload AnyKernel3 image => (${{ env.builddate }})"
-        uses: actions/upload-artifact@v3
-        if: ${{ env.useAnykernel == 'true' }}
+      - name: 📤 Upload AnyKernel3 zip
+        uses: actions/upload-artifact@v4
         with:
-          name: "${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}_${{ env.builddate }}"
-          path: AnyKernel3/*
-
-      - name: 🧧 Create GitHub Release => (${{ env.builddate }})
-        continue-on-error: true
-        uses: softprops/action-gh-release@v1
-        if: ${{ env.useAnykernel == 'true' && env.release == 'true' }}
-        with:
-          tag_name: v${{ env.builddate }}.${{ github.run_number }}
-          files: "${{ env.WORKSPACE }}/${{ env.KERNEL_DEVICE }}-${{ env.KERNEL_NAME }}_${{ env.builddate }}.zip"
-          generate_release_notes: true
+          name: Alioth-Kernel-KSU-AnyKernel3
+          path: Alioth-Kernel-KSU.zip

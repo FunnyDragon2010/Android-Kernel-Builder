@@ -1,8 +1,8 @@
 [  {
     "kernelSource": {
       "name": "alioth-ksun",
-      "repo": "https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git",
-      "branch": "alioth-r-oss",
+      "repo": "https://github.com/FunnyDragon2010/nethunter_kernel_xiaomi_sm8250_KPM_KSU/tree/staging",
+      "branch": "staging",
       "device": "alioth"
     },
     "withKernelSU": true,

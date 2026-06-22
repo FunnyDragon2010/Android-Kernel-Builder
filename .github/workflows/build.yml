@@ -58,7 +58,14 @@ jobs:
         working-directory: ./${{ env.kernelDir }}
         run: |
           git clone --recursive --branch $kernelBranch $kernelRepo $kernelName --depth=1
-
+      # ⬇️ ВОТ СЮДА ВСТАВЛЯЕМ НОВЫЙ ШАГ ⬇️
+      - name: "🔧 Patch out MLGO flags"
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        run: |
+          sed -i '/regalloc-enable-advisor=release/d' Makefile
+          sed -i '/enable-ml-inliner=release/d' Makefile
+          grep -n "regalloc-enable-advisor\|enable-ml-inliner" Makefile || echo "MLGO flags removed successfully"
+      # ⬆️ КОНЕЦ НОВОГО ШАГА ⬆️
       - name: "💫 Get toolchains"
         working-directory: ./${{ env.kernelDir }}
         env:

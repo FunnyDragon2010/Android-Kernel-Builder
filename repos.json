@@ -1,9 +1,10 @@
-[  {
+[
+  {
     "kernelSource": {
-      "name": "miku-KernelSU",
-      "repo": "https://github.com/PhamtomK12/kernel_xiaomi_odin",
-      "branch": "TDA",
-      "device": "odin"
+      "name": "alioth-KernelSU",
+      "repo": "https://github.com/Impqxr/kernel_xiaomi_sm8250",
+      "branch": "16.4.3",
+      "device": "alioth"
     },
     "withKernelSU": true,
     "toolchains": [
@@ -13,8 +14,8 @@
         "name": "gas"
       },
       {
-        "repo": "https://gitlab.com/ThankYouMario/android_prebuilts_clang-standalone/",
-        "branch": "11",
+        "repo": "https://github.com/ZyCromerZ/Clang",
+        "branch": "16.0.6-20260510-release",
         "name": "clang"
       }
     ],
